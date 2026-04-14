@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(npx expo:*)",
+      "Bash(npx react-native:*)",
+      "Bash(npm list:*)",
+      "Read(//c/Users/mfree/AppData/Local/Android/Sdk/platform-tools/**)",
+      "Read(//c/Users/mfree/AppData/Local/**)",
+      "Bash(npm)"
+    ]
+  }
+}

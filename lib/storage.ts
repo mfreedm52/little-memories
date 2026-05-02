@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
-import { JournalEntry } from '@/types/journal';
+import { Platform } from 'react-native';
+import { JournalEntry, PhotoEntry } from '@/types/journal';
 
 const ENTRY_KEY_PREFIX = 'journal_entry_';
 const DATES_INDEX_KEY = 'journal_entry_dates';
@@ -9,7 +10,12 @@ export async function getEntry(date: string): Promise<JournalEntry | null> {
   try {
     const raw = await AsyncStorage.getItem(`${ENTRY_KEY_PREFIX}${date}`);
     if (!raw) return null;
-    return JSON.parse(raw) as JournalEntry;
+    const entry = JSON.parse(raw) as JournalEntry;
+    // Migrate old format: photos was string[]
+    entry.photos = (entry.photos as unknown as (PhotoEntry | string)[]).map((p) =>
+      typeof p === 'string' ? { uri: p, frameId: 'none' } : p,
+    );
+    return entry;
   } catch {
     return null;
   }
@@ -42,9 +48,13 @@ export async function getAllEntryDates(): Promise<string[]> {
 
 /**
  * Copies a photo URI into the app's local documents directory and returns the
- * new permanent URI.
+ * new permanent URI. On web the file system API is unavailable, so the source
+ * URI is returned as-is.
  */
 export function copyPhotoToLocal(sourceUri: string): Promise<string> {
+  if (Platform.OS === 'web') {
+    return Promise.resolve(sourceUri);
+  }
   const dir = new Directory(Paths.document, 'journal-photos');
   if (!dir.exists) {
     dir.create();

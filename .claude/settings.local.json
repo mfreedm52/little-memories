@@ -8,7 +8,11 @@
       "Bash(npm list:*)",
       "Read(//c/Users/mfree/AppData/Local/Android/Sdk/platform-tools/**)",
       "Read(//c/Users/mfree/AppData/Local/**)",
-      "Bash(npm)"
+      "Bash(npm)",
+      "Bash(jobs -l)",
+      "Bash(curl -s http://localhost:8081)",
+      "Bash(curl -s --max-time 5 http://localhost:8081)",
+      "Bash(start *)"
     ]
   }
 }

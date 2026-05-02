@@ -1,7 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,10 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import FramePickerModal from '@/components/FramePickerModal';
+import FramedPhoto from '@/components/frames/FramedPhoto';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Journal } from '@/constants/theme';
 import { copyPhotoToLocal, getEntry, saveEntry } from '@/lib/storage';
-import { JournalEntry } from '@/types/journal';
+import { JournalEntry, PhotoEntry } from '@/types/journal';
 
 function todayKey(): string {
   const d = new Date();
@@ -50,10 +51,11 @@ export default function TodayScreen() {
   const { dayOfWeek, monthDay } = formatDate(dateKey);
 
   const [text, setText] = useState('');
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
+  const [pendingAssets, setPendingAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [showFramePicker, setShowFramePicker] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load existing entry on mount
   useEffect(() => {
     getEntry(dateKey).then((entry) => {
       if (entry) {
@@ -64,7 +66,7 @@ export default function TodayScreen() {
   }, [dateKey]);
 
   const persist = useCallback(
-    (newText: string, newPhotos: string[]) => {
+    (newText: string, newPhotos: PhotoEntry[]) => {
       const entry: JournalEntry = {
         date: dateKey,
         text: newText,
@@ -94,17 +96,32 @@ export default function TodayScreen() {
     });
 
     if (!result.canceled) {
-      const newUris = await Promise.all(
-        result.assets.map((a) => copyPhotoToLocal(a.uri)),
-      );
-      const updated = [...photos, ...newUris];
-      setPhotos(updated);
-      persist(text, updated);
+      setPendingAssets(result.assets);
+      setShowFramePicker(true);
     }
   };
 
+  const handleFrameConfirm = async (frameId: string) => {
+    setShowFramePicker(false);
+    const newEntries = await Promise.all(
+      pendingAssets.map(async (a) => ({
+        uri: await copyPhotoToLocal(a.uri),
+        frameId,
+      })),
+    );
+    const updated = [...photos, ...newEntries];
+    setPhotos(updated);
+    persist(text, updated);
+    setPendingAssets([]);
+  };
+
+  const handleFrameDismiss = () => {
+    setShowFramePicker(false);
+    setPendingAssets([]);
+  };
+
   const handleRemovePhoto = (uri: string) => {
-    const updated = photos.filter((p) => p !== uri);
+    const updated = photos.filter((p) => p.uri !== uri);
     setPhotos(updated);
     persist(text, updated);
   };
@@ -136,12 +153,12 @@ export default function TodayScreen() {
             style={styles.photoStrip}
             contentContainerStyle={styles.photoStripContent}
           >
-            {photos.map((uri) => (
-              <View key={uri} style={styles.photoWrapper}>
-                <Image source={{ uri }} style={styles.photo} />
+            {photos.map((p, i) => (
+              <View key={p.uri} style={styles.photoWrapper}>
+                <FramedPhoto uri={p.uri} frameId={p.frameId} size={100} idx={i} />
                 <TouchableOpacity
                   style={styles.removeBtn}
-                  onPress={() => handleRemovePhoto(uri)}
+                  onPress={() => handleRemovePhoto(p.uri)}
                   hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                 >
                   <IconSymbol name="xmark.circle.fill" size={20} color={Journal.accent} />
@@ -156,9 +173,6 @@ export default function TodayScreen() {
 
           {/* Ruled Paper Text Area */}
           <View style={styles.paperCard}>
-            {/* Border-bottom rows — each is exactly LINE_HEIGHT tall so text
-                lands precisely on each line. pointerEvents="none" lets taps
-                pass through to the TextInput beneath. */}
             <View style={styles.ruledBackground} pointerEvents="none">
               {Array.from({ length: NUM_LINES }).map((_, i) => (
                 <View key={i} style={styles.ruleLine} />
@@ -176,6 +190,13 @@ export default function TodayScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <FramePickerModal
+        visible={showFramePicker}
+        photoUri={pendingAssets[0]?.uri ?? ''}
+        onConfirm={handleFrameConfirm}
+        onDismiss={handleFrameDismiss}
+      />
     </SafeAreaView>
   );
 }
@@ -227,12 +248,6 @@ const styles = StyleSheet.create({
   photoWrapper: {
     position: 'relative',
   },
-  photo: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: Journal.photoBackground,
-  },
   removeBtn: {
     position: 'absolute',
     top: -8,
@@ -268,21 +283,17 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
   },
-  // Rows start at PAPER_PAD_TOP so the first rule sits at the bottom of line 1
   ruledBackground: {
     position: 'absolute',
     top: PAPER_PAD_TOP,
     left: 0,
     right: 0,
   },
-  // Each row is exactly LINE_HEIGHT tall; its border-bottom IS the rule line
   ruleLine: {
     height: LINE_HEIGHT,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Journal.rule,
   },
-  // absoluteFillObject fills the card; paddingTop matches ruledBackground.top
-  // so the first character sits directly above the first rule
   textInput: {
     paddingTop: PAPER_PAD_TOP,
     paddingHorizontal: PAPER_PAD_H,

@@ -1,6 +1,7 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   FlatList,
   Platform,
@@ -19,7 +20,10 @@ import { PhotoEntry } from '@/types/journal';
 type MemoryItem = PhotoEntry & { date: string };
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const PHOTO_SIZE = Math.min(SCREEN_WIDTH - 64, 360);
+const ITEM_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.72), 320);
+const ITEM_GAP = 16;
+const SIDE_PADDING = (SCREEN_WIDTH - ITEM_WIDTH) / 2;
+const SNAP_INTERVAL = ITEM_WIDTH + ITEM_GAP;
 
 function formatDate(dateKey: string): string {
   const [y, m, d] = dateKey.split('-').map(Number);
@@ -33,10 +37,47 @@ function formatDate(dateKey: string): string {
   return `${day} · ${rest}`;
 }
 
+function MemoryCard({
+  item,
+  index,
+  scrollX,
+}: {
+  item: MemoryItem;
+  index: number;
+  scrollX: Animated.Value;
+}) {
+  const scale = scrollX.interpolate({
+    inputRange: [
+      (index - 1) * SNAP_INTERVAL,
+      index * SNAP_INTERVAL,
+      (index + 1) * SNAP_INTERVAL,
+    ],
+    outputRange: [0.84, 1, 0.84],
+    extrapolate: 'clamp',
+  });
+  const opacity = scrollX.interpolate({
+    inputRange: [
+      (index - 1) * SNAP_INTERVAL,
+      index * SNAP_INTERVAL,
+      (index + 1) * SNAP_INTERVAL,
+    ],
+    outputRange: [0.4, 1, 0.4],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <Animated.View style={[s.card, { width: ITEM_WIDTH, transform: [{ scale }], opacity }]}>
+      <FramedPhoto uri={item.uri} frameId={item.frameId} size={ITEM_WIDTH} idx={index} />
+      <Text style={s.dateLabel}>{formatDate(item.date)}</Text>
+    </Animated.View>
+  );
+}
+
 export default function MemoriesScreen() {
   const [photos, setPhotos] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -77,7 +118,9 @@ export default function MemoriesScreen() {
         </View>
         <View style={s.center}>
           <Text style={s.emptyText}>No photos yet.</Text>
-          <Text style={s.emptySubtext}>Add photos to your journal entries{'\n'}and they'll appear here.</Text>
+          <Text style={s.emptySubtext}>
+            Add photos to your journal entries{'\n'}and they'll appear here.
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -85,7 +128,6 @@ export default function MemoriesScreen() {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      {/* Header with counter */}
       <View style={s.header}>
         <Text style={s.title}>Memories</Text>
         <Text style={s.counter}>
@@ -93,26 +135,37 @@ export default function MemoriesScreen() {
         </Text>
       </View>
 
-      <FlatList
-        data={photos}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item, index) => `${item.uri}-${index}`}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        renderItem={({ item, index }) => (
-          <View style={[s.slide, { width: SCREEN_WIDTH }]}>
-            <FramedPhoto
-              uri={item.uri}
-              frameId={item.frameId}
-              size={PHOTO_SIZE}
-              idx={index}
-            />
-            <Text style={s.dateLabel}>{formatDate(item.date)}</Text>
-          </View>
-        )}
-      />
+      <View style={s.carouselContainer}>
+        <FlatList
+          data={photos}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={SNAP_INTERVAL}
+          decelerationRate="fast"
+          contentContainerStyle={{ paddingHorizontal: SIDE_PADDING }}
+          ItemSeparatorComponent={() => <View style={{ width: ITEM_GAP }} />}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: Platform.OS !== 'web' },
+          )}
+          scrollEventThrottle={16}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          keyExtractor={(item, i) => `${item.uri}-${i}`}
+          renderItem={({ item, index }) => (
+            <MemoryCard item={item} index={index} scrollX={scrollX} />
+          )}
+        />
+      </View>
+
+      {/* Dot indicators — shown when small enough to be meaningful */}
+      {photos.length > 1 && photos.length <= 12 && (
+        <View style={s.dots}>
+          {photos.map((_, i) => (
+            <View key={i} style={[s.dot, i === currentIndex && s.dotActive]} />
+          ))}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -142,17 +195,36 @@ const s = StyleSheet.create({
     color: Journal.textMuted,
     letterSpacing: 0.5,
   },
-  slide: {
-    alignItems: 'center',
+  carouselContainer: {
+    flex: 1,
     justifyContent: 'center',
-    paddingVertical: 32,
-    gap: 20,
+  },
+  card: {
+    alignItems: 'center',
+    gap: 16,
   },
   dateLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: Journal.textMuted,
     textAlign: 'center',
     letterSpacing: 0.2,
+  },
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: 28,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Journal.rule,
+  },
+  dotActive: {
+    width: 18,
+    backgroundColor: Journal.accent,
   },
   center: {
     flex: 1,

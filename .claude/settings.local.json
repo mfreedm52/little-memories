@@ -12,7 +12,8 @@
       "Bash(jobs -l)",
       "Bash(curl -s http://localhost:8081)",
       "Bash(curl -s --max-time 5 http://localhost:8081)",
-      "Bash(start *)"
+      "Bash(start *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

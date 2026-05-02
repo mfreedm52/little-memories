@@ -22,6 +22,7 @@ const MAPPING = {
   'calendar': 'calendar-today',
   'person.fill': 'person',
   'photo.on.rectangle': 'add-photo-alternate',
+  'photo.stack': 'photo-library',
   'xmark.circle.fill': 'cancel',
 } as IconMapping;
 

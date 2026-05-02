@@ -47,6 +47,19 @@ export async function getAllEntryDates(): Promise<string[]> {
 }
 
 /**
+ * Returns every photo from every entry, sorted newest-first by entry date.
+ */
+export async function getAllPhotos(): Promise<Array<PhotoEntry & { date: string }>> {
+  const dates = await getAllEntryDates();
+  const entries = await Promise.all(dates.map(getEntry));
+  return entries
+    .filter((e): e is JournalEntry => e !== null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .flatMap((e) => e.photos.map((p) => ({ ...p, date: e.date })))
+    .filter((p) => Boolean(p.uri));
+}
+
+/**
  * Copies a photo URI into the app's local documents directory and returns the
  * new permanent URI. On web the file system API is unavailable, so the source
  * URI is returned as-is.
